@@ -902,7 +902,7 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 			openMedia(message);
 			return;
 		}
-		setActionMessage(message);
+		quickReact(message);
 	};
 
 	const closeViewer = () => {
@@ -931,16 +931,9 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 		startReply(message);
 	};
 
-	const replyToSelectedMessage = () => {
-		const message = page?.messages.find((candidate) => candidate.id === selectedMessageId);
-		if (!message) return;
-		startReply(message);
-	};
-
-	const reactToMessage = (emoji: string) => {
-		if (!actionMessage) return;
-		const messageId = actionMessage.id;
-		const remove = actionMessage.reactions.some((reaction) => reaction.emoji === emoji && reaction.isOwn);
+	const sendReaction = (message: UniversalMessage, emoji: string) => {
+		const messageId = message.id;
+		const remove = message.reactions.some((reaction) => reaction.emoji === emoji && reaction.isOwn);
 		if (!remove) {
 			setReactionUsage((current) => {
 				const next = { ...current, [emoji]: (current[emoji] ?? 0) + 1 };
@@ -949,12 +942,27 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 			});
 		}
 		void service
-			.react(conversation, actionMessage, emoji, remove)
+			.react(conversation, message, emoji, remove)
 			.then(() => load())
 			.catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to react'));
+		window.requestAnimationFrame(() => focus(`message-${messageId}`));
+	};
+
+	const quickReact = (message: UniversalMessage) => {
+		if (capabilities?.reactions === false) {
+			setActionMessage(message);
+			return;
+		}
+		const emoji = page?.allowedReactions?.[0] ?? '👍';
+		sendReaction(message, emoji);
+	};
+
+	const reactToMessage = (emoji: string) => {
+		if (!actionMessage) return;
+		const message = actionMessage;
 		setActionMessage(undefined);
 		setExpandedReactions(false);
-		window.requestAnimationFrame(() => focus(`message-${messageId}`));
+		sendReaction(message, emoji);
 	};
 
 	const pinMessage = () => {
@@ -1237,7 +1245,17 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 		if (composeControl === 'latest') return 'Latest';
 		if (composeControl === 'send') return editing ? 'Save' : 'Send';
 		if (composerFocused) return 'Type';
-		if (selectedMessageId) return 'Open';
+		if (selectedMessageId) {
+			const message = page?.messages.find((candidate) => candidate.id === selectedMessageId);
+			if (message?.quote?.sentAt) return 'Goto Quote';
+			if (message?.attachments.some((attachment) => attachment.kind === 'image' || attachment.kind === 'video')) {
+				return message.attachments.some((attachment) => attachment.kind === 'video')
+					? 'Play video'
+					: 'View photo';
+			}
+			if (message?.attachments.some((attachment) => attachment.kind === 'audio')) return 'Play';
+			return capabilities?.reactions === false ? 'Open' : 'React';
+		}
 		return 'Type';
 	};
 
@@ -1247,7 +1265,7 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 				actionMessage || showOptions || optionPanel || stickerOpen || forwarding || attachmentOpen
 					? undefined
 					: selectedMessageId
-						? { label: 'Reply', onPress: replyToSelectedMessage }
+						? { label: 'Message', onPress: openMessageActions }
 						: { label: 'Options', onPress: () => setShowOptions(true) },
 			center: viewer || stickerOpen || forwarding || attachmentOpen
 				? { label: 'Select', onPress: activate }
@@ -1261,19 +1279,19 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 									if (pin) jumpToPinnedMessage(pin);
 								},
 							}
-						: showOptions || optionPanel
-							? { label: 'Select', onPress: activate }
-					: {
-									label: composerSoftkeyLabel(),
-									onPress: () => {
-										if (composeControl) activate();
-										else if (composerFocused) inputRef.current?.focus();
-										else if (selectedMessageId) {
-											const message = page?.messages.find((candidate) => candidate.id === selectedMessageId);
-											if (message) activateMessage(message);
-										} else inputRef.current?.focus();
+							: showOptions || optionPanel
+								? { label: 'Select', onPress: activate }
+								: {
+										label: composerSoftkeyLabel(),
+										onPress: () => {
+											if (composeControl) activate();
+											else if (composerFocused) inputRef.current?.focus();
+											else if (selectedMessageId) {
+												const message = page?.messages.find((candidate) => candidate.id === selectedMessageId);
+												if (message) activateMessage(message);
+											} else inputRef.current?.focus();
+										},
 									},
-								},
 			right: {
 				label: 'Back',
 				onPress: goBack,
@@ -1692,9 +1710,27 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 							Replying to{' '}
 							{replying.direction === 'outgoing' ? 'your message' : (replying.sender ?? 'message')}
 						</span>
-						<button type="button" onClick={() => setReplying(undefined)}>
+						<FocusButton
+							id="chat-cancel-reply"
+							type="button"
+							onFocus={() => {
+								composerFocusLocked.current = false;
+							}}
+							onArrow={(key) => {
+								if (key === 'ArrowDown') {
+									focus('chat-compose');
+									return true;
+								}
+								return key === 'ArrowUp';
+							}}
+							onClick={() => {
+								setReplying(undefined);
+								window.requestAnimationFrame(() => focus('chat-compose'));
+							}}
+							aria-label="Cancel reply"
+						>
 							×
-						</button>
+						</FocusButton>
 					</div>
 				)}
 				{capabilities?.voiceNotes && (
@@ -1804,7 +1840,13 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 						composerFocusLocked.current = true;
 					}}
 					onArrow={(key) => {
-						if (key === 'ArrowUp') return focusLastMessage();
+						if (key === 'ArrowUp') {
+							if (replying) {
+								focus('chat-cancel-reply');
+								return true;
+							}
+							return focusLastMessage();
+						}
 						if (key === 'ArrowLeft') {
 							focus(controlBeforeInput());
 							return true;

@@ -190,7 +190,15 @@ async function scheduledSignalUpdate() {
 setInterval(scheduledSignalUpdate, 24 * 60 * 60 * 1000).unref();
 
 async function rpc(method, params = {}, timeoutMs = 30_000) {
-  if (!signalReady) throw new Error("Signal service is starting");
+  // A freshly started daemon can take a moment to accept its first request.
+  // Wait briefly instead of surfacing a transient start-up error to the widget.
+  if (!signalReady) {
+    const deadline = Date.now() + Math.min(timeoutMs, 10_000);
+    while (!signalReady && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    if (!signalReady) throw new Error("Signal service is starting");
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -1305,9 +1313,11 @@ async function api(req, res, url) {
       ...(quote ? { quoteTimestamp: quote.timestamp, quoteAuthor: quote.direction === "out" ? account : quote.senderId, quoteMessage: quote.text || "" } : {}),
     };
     const urlMatch = text.match(/https?:\/\/[^\s]+/i);
+    let preview;
     if (urlMatch && appState.settings.linkPreviews) {
       common.previewUrl = urlMatch[0];
       try { common.previewTitle = new URL(urlMatch[0]).hostname; } catch { common.previewTitle = "Link"; }
+      preview = { url: common.previewUrl, title: common.previewTitle };
     }
     const noteToSelf = input.kind === "direct" && input.target === account;
     const params = input.kind === "group"
@@ -1315,7 +1325,7 @@ async function api(req, res, url) {
       : noteToSelf ? { ...common, noteToSelf: true } : { ...common, recipient: [input.target] };
     const result = await rpc("send", params);
     const timestamp = Number(result?.timestamp || Date.now());
-    const sent = { id: `${timestamp}-out`, conversationId, direction: "out", sender: account, senderId: account, text, timestamp, status: "sent", receipts: {}, reactions: [], attachments: [], quote: quote ? { timestamp: quote.timestamp, author: quote.sender || quote.senderId, text: quote.text || "" } : null, expiresInSeconds: expiration, expiresAt: expiration ? timestamp + expiration * 1000 : null };
+    const sent = { id: `${timestamp}-out`, conversationId, direction: "out", sender: account, senderId: account, text, timestamp, status: "sent", receipts: {}, reactions: [], attachments: [], previews: preview ? [preview] : [], quote: quote ? { timestamp: quote.timestamp, author: quote.sender || quote.senderId, text: quote.text || "" } : null, expiresInSeconds: expiration, expiresAt: expiration ? timestamp + expiration * 1000 : null };
     if (!messages.some(item => item.id === sent.id)) {
       messages.push(sent);
       await persistMessages();

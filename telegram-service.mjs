@@ -71,6 +71,25 @@ function mediaContentType(media) {
   return media.mimeType || "application/octet-stream";
 }
 
+function linkPreviews(message, enabled) {
+  if (!enabled) return [];
+
+  const page = message.media?.type === "web_page" ? message.media : message.webPage;
+  const url = page?.url || page?.displayUrl || message.text?.match(/https?:\/\/[^\s]+/i)?.[0];
+  if (!url) return [];
+
+  let fallbackTitle = "Link";
+  try {
+    fallbackTitle = new URL(url).hostname;
+  } catch {}
+
+  return [{
+    url,
+    title: page?.title || page?.siteName || fallbackTitle,
+    description: page?.description,
+  }];
+}
+
 function serviceMessageText(message) {
   const action = message.action;
   return action?.message || action?.type?.replaceAll("_", " ") || "Chat updated";
@@ -483,7 +502,7 @@ export class TelegramService {
     const chat = message.chat || dialog?.peer;
     const id = `${peerId(chat)}:${message.id}`;
     const outgoing = Boolean(message.isOutgoing || peerId(chat) === peerId(this.me));
-    const readOutboxMaxId = Number(dialog?.lastReadOutgoing || 0);
+    const readOutboxMaxId = Number(dialog?.readOutboxMaxId ?? dialog?.lastReadOutgoing ?? 0);
     const attachments = [];
 
     if (message.media && !["web_page", "poll"].includes(message.media.type)) {
@@ -509,9 +528,12 @@ export class TelegramService {
       edited: Boolean(message.editDate),
       pinned: Boolean(message.isPinned),
       deleted: false,
-      status: outgoing && message.id <= readOutboxMaxId ? "read" : "sent",
+      // Telegram exposes the peer's read maximum, but not a separate recipient
+      // delivery event. A successfully accepted outgoing message is delivered.
+      status: outgoing ? (message.id <= readOutboxMaxId ? "read" : "delivered") : undefined,
       receipts: {},
       attachments,
+      previews: linkPreviews(message, this.state.settings.linkPreviews),
       reactions: this.messageReactions(message),
       quote: message.replyToMessage
         ? {

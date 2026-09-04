@@ -20,7 +20,7 @@ export function MessagingServiceProvider({ children }: { children: ComponentChil
 	const services = useMemo(
 		() =>
 			availableServices.filter((service) =>
-				statuses.some((status) => status.id === service.id && status.connected),
+				statuses.some((status) => status.id === service.id && status.connected && status.ready),
 			),
 		[availableServices, statuses],
 	);
@@ -47,6 +47,14 @@ export function MessagingServiceProvider({ children }: { children: ComponentChil
 	useEffect(() => {
 		void refreshStatuses();
 	}, [availableServices]);
+
+	useEffect(() => {
+		// Keep checking only services which are linked but whose daemon is still booting.
+		// This avoids a stale "Service starting" state after the app shell has loaded.
+		if (!statuses.some((status) => status.connected && !status.ready)) return;
+		const timer = window.setTimeout(() => void refreshStatuses(), 2_000);
+		return () => window.clearTimeout(timer);
+	}, [statuses]);
 
 	return (
 		<ServiceContext.Provider

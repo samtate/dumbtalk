@@ -36,6 +36,7 @@ type TelegramMessage = {
 	pinned?: boolean;
 	deleted?: boolean;
 	status?: 'sent' | 'delivered' | 'read';
+	previews?: { title?: string; description?: string; url?: string }[];
 	attachments?: {
 		id?: string;
 		contentType?: string;
@@ -135,13 +136,15 @@ function messageFromTelegram(message: TelegramMessage): UniversalMessage {
 				? `${ROOT}/avatar/${encodeURIComponent(reaction.authorId)}`
 				: undefined,
 		})),
-		receipt:
-			message.direction === 'out'
-				? { state: message.status === 'read' ? 'read' : 'sent' }
-				: undefined,
+		receipt: message.direction === 'out' ? { state: message.status ?? 'delivered' } : undefined,
 		quote: message.quote?.author
 			? { author: message.quote.author, text: message.quote.text, sentAt: message.quote.timestamp }
 			: undefined,
+		previews: message.previews?.map((preview) => ({
+			title: preview.title ?? preview.url ?? 'Link',
+			description: preview.description,
+			url: preview.url,
+		})),
 		edited: message.edited,
 		deleted: message.deleted,
 		pinned: message.pinned,
@@ -415,7 +418,7 @@ export const telegramService: MessagingService = {
 		return {
 			...message,
 			receipt: {
-				state: response.readBy.length ? 'read' : (message.receipt?.state ?? 'sent'),
+				state: response.readBy.length ? 'read' : (message.receipt?.state ?? 'delivered'),
 				readBy: response.readBy.map((receipt) => ({
 					name: receipt.name,
 					status: 'read',
