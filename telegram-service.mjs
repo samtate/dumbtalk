@@ -460,6 +460,7 @@ export class TelegramService {
       values.push({
         emoji: normalizeReaction(reaction.emoji),
         author: peerName(reaction.peer, "Telegram user"),
+        authorId: String(peerId(reaction.peer) || ""),
         own: peerId(reaction.peer) === peerId(this.me),
       });
     }
@@ -470,6 +471,7 @@ export class TelegramService {
         values.push({
           emoji: normalizeReaction(reaction.emoji),
           author: reaction.order !== null ? "You" : "Telegram user",
+          authorId: reaction.order !== null ? String(peerId(this.me) || "") : "",
           own: reaction.order !== null,
         });
       }
@@ -513,9 +515,12 @@ export class TelegramService {
       reactions: this.messageReactions(message),
       quote: message.replyToMessage
         ? {
-            telegramId: message.replyToMessage.messageId,
-            author: "Reply",
-            text: "Quoted message",
+            telegramId: message.replyToMessage.messageId || message.replyToMessage.id,
+            timestamp: message.replyToMessage.date?.getTime?.() || 0,
+            author: message.replyToMessage.isOutgoing
+              ? "You"
+              : peerName(message.replyToMessage.sender, "Reply"),
+            text: message.replyToMessage.text || message.replyToMessage.message || message.replyToMessage.media?.type || "Quoted message",
           }
         : null,
       poll: pollFromMessage(message),

@@ -494,6 +494,7 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 	const typingTimer = useRef<number>();
 	const reading = useRef(false);
 	const draftBeforeEdit = useRef('');
+	const composerFocusLocked = useRef(false);
 
 	const captureAnchor = () => {
 		const timeline = timelineRef.current;
@@ -636,6 +637,23 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 		}
 	}, [page, focus]);
 
+	useLayoutEffect(() => {
+		if (!composerFocusLocked.current || document.activeElement === inputRef.current) return;
+		if (actionMessage || showOptions || optionPanel || viewer || voiceOpen || attachmentOpen || stickerOpen || forwarding) return;
+		focus('chat-compose');
+	}, [
+		actionMessage,
+		attachmentOpen,
+		focus,
+		forwarding,
+		optionPanel,
+		page,
+		showOptions,
+		stickerOpen,
+		viewer,
+		voiceOpen,
+	]);
+
 	const scrollWithinMessage = (messageId: string, key: ArrowKey) => {
 		if (key !== 'ArrowUp' && key !== 'ArrowDown') return false;
 		const timeline = timelineRef.current;
@@ -754,6 +772,28 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 		inputRef.current?.focus({ preventScroll: true });
 	};
 
+	const jumpToQuotedMessage = (message: UniversalMessage) => {
+		const quotedAt = message.quote?.sentAt;
+		if (!quotedAt) {
+			setError('The quoted message is unavailable.');
+			return;
+		}
+
+		const existing = page?.messages.find((candidate) => candidate.sentAt === quotedAt);
+		followBottom.current = false;
+		if (existing) {
+			window.requestAnimationFrame(() => focus(`message-${existing.id}`));
+			return;
+		}
+
+		pendingFocus.current = undefined;
+		void load(quotedAt + 1).then((next) => {
+			const quoted = next?.messages.find((candidate) => candidate.sentAt === quotedAt);
+			if (quoted) window.requestAnimationFrame(() => focus(`message-${quoted.id}`));
+			else setError('The quoted message is no longer available.');
+		});
+	};
+
 	const clearDraft = () => {
 		setDraft('');
 		setEditing(undefined);
@@ -850,6 +890,10 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 	};
 
 	const activateMessage = (message: UniversalMessage) => {
+		if (message.quote?.sentAt) {
+			jumpToQuotedMessage(message);
+			return;
+		}
 		if (toggleVoiceNote(message)) return;
 		if (openViewOnce(message)) return;
 		if (
@@ -873,11 +917,24 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 		if (messageId) window.requestAnimationFrame(() => focus(`message-${messageId}`));
 	};
 
+	const startReply = (message: UniversalMessage) => {
+		setReplying(message);
+		pendingFocus.current = undefined;
+		composerFocusLocked.current = true;
+		window.requestAnimationFrame(() => focus('chat-compose'));
+	};
+
 	const replyToMessage = () => {
 		if (!actionMessage) return;
-		setReplying(actionMessage);
+		const message = actionMessage;
 		setActionMessage(undefined);
-		inputRef.current?.focus({ preventScroll: true });
+		startReply(message);
+	};
+
+	const replyToSelectedMessage = () => {
+		const message = page?.messages.find((candidate) => candidate.id === selectedMessageId);
+		if (!message) return;
+		startReply(message);
 	};
 
 	const reactToMessage = (emoji: string) => {
@@ -1190,7 +1247,7 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 				actionMessage || showOptions || optionPanel || stickerOpen || forwarding || attachmentOpen
 					? undefined
 					: selectedMessageId
-						? { label: 'Message', onPress: openMessageActions }
+						? { label: 'Reply', onPress: replyToSelectedMessage }
 						: { label: 'Options', onPress: () => setShowOptions(true) },
 			center: viewer || stickerOpen || forwarding || attachmentOpen
 				? { label: 'Select', onPress: activate }
@@ -1533,17 +1590,30 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 									if (audio) audioElements.current.set(message.id, audio);
 									else audioElements.current.delete(message.id);
 								}}
-								onFocus={() => {
+									onFocus={() => {
 									pendingFocus.current = message.id;
 									revealMessageStart(message.id);
 									setSelectedMessageId(message.id);
 									setComposerFocused(false);
 									setComposeControl(undefined);
+									composerFocusLocked.current = false;
 									window.requestAnimationFrame(markReadAtBottom);
 								}}
 								onArrow={(key) => {
-									if (key === 'ArrowLeft') return focusJumpToLatest();
-									if (key === 'ArrowRight') return true;
+									if (key === 'ArrowRight') return focusJumpToLatest();
+									if (key === 'ArrowLeft') {
+										startReply(message);
+										return true;
+									}
+									if (
+										key === 'ArrowDown' &&
+										!page.messages
+											.slice(page.messages.indexOf(message) + 1)
+											.some((candidate) => candidate.direction !== 'system')
+									) {
+										focus('chat-compose');
+										return true;
+									}
 									return scrollWithinMessage(message.id, key);
 								}}
 							/>
@@ -1637,6 +1707,7 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 							setComposeControl('voice');
 							setComposerFocused(false);
 							setSelectedMessageId(undefined);
+							composerFocusLocked.current = false;
 						}}
 						onArrow={(key) => {
 							if (key === 'ArrowRight') {
@@ -1661,6 +1732,7 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 							setComposeControl('attachment');
 							setComposerFocused(false);
 							setSelectedMessageId(undefined);
+							composerFocusLocked.current = false;
 						}}
 						onArrow={(key) => {
 							if (key === 'ArrowLeft') focus(capabilities?.voiceNotes ? 'chat-voice' : 'chat-attachment');
@@ -1683,6 +1755,7 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 							setComposeControl('sticker');
 							setComposerFocused(false);
 							setSelectedMessageId(undefined);
+							composerFocusLocked.current = false;
 						}}
 						onArrow={(key) => {
 							if (key === 'ArrowLeft') focus(controlBeforeSticker());
@@ -1709,6 +1782,7 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 							setComposeControl('clear');
 							setComposerFocused(false);
 							setSelectedMessageId(undefined);
+							composerFocusLocked.current = false;
 						}}
 						onClick={clearDraft}
 						aria-label="Clear draft"
@@ -1726,6 +1800,8 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 						setComposerFocused(true);
 						setSelectedMessageId(undefined);
 						setComposeControl(undefined);
+						pendingFocus.current = undefined;
+						composerFocusLocked.current = true;
 					}}
 					onArrow={(key) => {
 						if (key === 'ArrowUp') return focusLastMessage();
@@ -1737,7 +1813,7 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 							focus('chat-send');
 							return true;
 						}
-						return false;
+						return key === 'ArrowDown';
 					}}
 					onKeyDown={(event) => {
 						if (event.key !== 'Enter') return;
@@ -1755,6 +1831,7 @@ export function ChatRoom({ conversation, initialMessage, onBack }: Props) {
 						setComposerFocused(false);
 						setComposeControl('send');
 						setSelectedMessageId(undefined);
+						composerFocusLocked.current = false;
 					}}
 					onArrow={(key) => {
 						if (key === 'ArrowLeft') {

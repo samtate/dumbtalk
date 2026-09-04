@@ -27,9 +27,9 @@ type SignalMessage = {
 	sender?: string;
 	text?: string;
 	attachments?: { id?: string; contentType?: string; filename?: string; size?: number; caption?: string; width?: number; height?: number }[];
-	reactions?: { emoji: string; author?: string; own?: boolean }[];
+	reactions?: { emoji: string; author?: string; authorId?: string; own?: boolean }[];
 	status?: 'sent' | 'delivered' | 'read';
-	quote?: { author?: string; text?: string };
+	quote?: { author?: string; text?: string; timestamp?: number };
 	edited?: boolean;
 	deleted?: boolean;
 	pinned?: boolean;
@@ -142,6 +142,9 @@ function toUniversalMessage(message: SignalMessage): UniversalMessage {
 			emoji: reaction.emoji,
 			author: reaction.author ?? 'Someone',
 			isOwn: Boolean(reaction.own),
+			avatarPath: reaction.authorId
+				? `/api/avatar/direct/${encodeURIComponent(reaction.authorId)}`
+				: undefined,
 		})),
 		receipt:
 			message.direction === 'out'
@@ -154,7 +157,9 @@ function toUniversalMessage(message: SignalMessage): UniversalMessage {
 						})),
 					}
 				: undefined,
-		quote: message.quote?.author ? { author: message.quote.author, text: message.quote.text } : undefined,
+		quote: message.quote?.author
+			? { author: message.quote.author, text: message.quote.text, sentAt: message.quote.timestamp }
+			: undefined,
 		edited: message.edited,
 		deleted: message.deleted,
 		pinned: message.pinned,

@@ -181,13 +181,44 @@
 }
 
 .reactions {
-	display: block;
+	display: flex;
+	align-items: center;
+	gap: 3px;
 	width: max-content;
 	margin-top: 2px;
 	padding: 1px 4px;
 	background: #10201b;
 	border-radius: 10px;
 	font-size: 12px;
+}
+
+.reactionGroup {
+	display: inline-flex;
+	align-items: center;
+	gap: 1px;
+}
+
+.reactionEmoji {
+	font-size: 12px;
+}
+
+.reactionAvatar,
+.reactionInitial {
+	width: 12px;
+	height: 12px;
+	margin-left: -3px;
+	border: 1px solid #10201b;
+	border-radius: 50%;
+	object-fit: cover;
+}
+
+.reactionInitial {
+	display: grid;
+	place-items: center;
+	background: #55736a;
+	color: #fff;
+	font-size: 7px;
+	font-weight: 800;
 }
 
 .time {
@@ -200,7 +231,8 @@
 .floatingLatest {
 	position: absolute;
 	bottom: 38px;
-	left: 7px;
+	right: 7px;
+	left: auto;
 	z-index: 3;
 	display: grid;
 	width: 27px;

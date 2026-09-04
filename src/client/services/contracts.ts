@@ -63,6 +63,7 @@ export type UniversalAttachment = {
 export type UniversalQuote = {
 	author: string;
 	text?: string;
+	sentAt?: number;
 };
 
 export type UniversalLinkPreview = {
@@ -135,6 +136,7 @@ export type UniversalReaction = {
 	emoji: string;
 	author: string;
 	isOwn: boolean;
+	avatarPath?: string;
 };
 
 export type UniversalMessage = {

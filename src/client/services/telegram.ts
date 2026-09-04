@@ -44,8 +44,8 @@ type TelegramMessage = {
 		width?: number;
 		height?: number;
 	}[];
-	reactions?: { emoji: string; author?: string; own?: boolean }[];
-	quote?: { author?: string; text?: string };
+	reactions?: { emoji: string; author?: string; authorId?: string; own?: boolean }[];
+	quote?: { author?: string; text?: string; timestamp?: number };
 	poll?: {
 		question: string;
 		options: { index: number; text: string; votes: string[] }[];
@@ -131,13 +131,16 @@ function messageFromTelegram(message: TelegramMessage): UniversalMessage {
 			emoji: reaction.emoji,
 			author: reaction.author ?? 'Telegram user',
 			isOwn: Boolean(reaction.own),
+			avatarPath: reaction.authorId
+				? `${ROOT}/avatar/${encodeURIComponent(reaction.authorId)}`
+				: undefined,
 		})),
 		receipt:
 			message.direction === 'out'
 				? { state: message.status === 'read' ? 'read' : 'sent' }
 				: undefined,
 		quote: message.quote?.author
-			? { author: message.quote.author, text: message.quote.text }
+			? { author: message.quote.author, text: message.quote.text, sentAt: message.quote.timestamp }
 			: undefined,
 		edited: message.edited,
 		deleted: message.deleted,

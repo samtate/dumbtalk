@@ -35,6 +35,15 @@ function ProtectedAsset({ path, alt, className }: { path?: string; alt: string; 
 	);
 }
 
+function ReactionAvatar({ path, author }: { path?: string; author: string }) {
+	const source = useProtectedBlob(path, path ? `reaction-avatar:${path}` : undefined);
+	return source ? (
+		<img class={styles.reactionAvatar} src={source} alt={author} title={author} />
+	) : (
+		<span class={styles.reactionInitial} title={author}>{author.slice(0, 1).toUpperCase()}</span>
+	);
+}
+
 function VoiceNote({
 	message,
 	attachment,
@@ -111,7 +120,12 @@ export function MessageBubble({
 		groupStart ? styles.messageGroupStart : ''
 	}`;
 	const attachment = attachmentLabel(message);
-	const reactions = message.reactions.map((reaction) => reaction.emoji).join(' ');
+	const reactionGroups = [...message.reactions.reduce((groups, reaction) => {
+		const group = groups.get(reaction.emoji) ?? [];
+		group.push(reaction);
+		groups.set(reaction.emoji, group);
+		return groups;
+	}, new Map<string, typeof message.reactions>()).entries()];
 	const voice = message.attachments.find((item) => item.kind === 'audio');
 
 	return (
@@ -165,7 +179,22 @@ export function MessageBubble({
 					{preview.description && <small>{preview.description}</small>}
 				</span>
 			))}
-			{reactions && <span class={styles.reactions}>{reactions}</span>}
+			{reactionGroups.length > 0 && (
+				<span class={styles.reactions}>
+					{reactionGroups.map(([emoji, reactions]) => (
+						<span class={styles.reactionGroup} key={emoji}>
+							<span class={styles.reactionEmoji}>{emoji}</span>
+							{reactions.map((reaction, index) => (
+								<ReactionAvatar
+									key={`${reaction.author}:${index}`}
+									path={reaction.avatarPath}
+									author={reaction.author}
+								/>
+							))}
+						</span>
+					))}
+				</span>
+			)}
 			{(showTime || message.receipt) && (
 				<time class={styles.time}>
 					{showTime &&

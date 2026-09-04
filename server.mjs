@@ -23,7 +23,7 @@ const invalidTokenAttempts = new Map();
 let messages = [];
 let appConfig = {};
 let widgetToken = process.env.WIDGET_TOKEN || "";
-let appState = { archived: [], favorites: [], muted: [], readThrough: {}, expirations: {}, localNicknames: {}, mindfulUsage: {}, settings: { sendReadReceipts: true, sendTypingIndicators: true, linkPreviews: true, defaultExpiration: 0 } };
+let appState = { archived: [], favorites: [], muted: [], readThrough: {}, expirations: {}, localNicknames: {}, mindfulUsage: {}, selfProfileName: "", settings: { sendReadReceipts: true, sendTypingIndicators: true, linkPreviews: true, defaultExpiration: 0 } };
 let signalProcess;
 let signalBinary = "/usr/local/bin/signal-cli";
 let signalFallback = signalBinary;
@@ -37,6 +37,14 @@ const syncRequestedAccounts = new Set();
 const conversationAliases = new Map();
 const typingState = new Map();
 const identityNames = new Map();
+let selfProfileName = "";
+
+function rememberSelfProfileName(name) {
+  if (!name || name === "Note to Self") return;
+  selfProfileName = name;
+  appState.selfProfileName = name;
+  void persistState();
+}
 const viewOnceTokens = new Map();
 let stateWrite = Promise.resolve();
 await mkdir(APP_DIR, { recursive: true });
@@ -79,7 +87,8 @@ function normalizedMentions(items) {
     const identifiers = [mention.number, mention.uuid, mention.aci, recipient.number, recipient.uuid, recipient.aci].filter(value => typeof value === "string" && value);
     const friendlyName = suppliedName && !identifiers.includes(suppliedName) ? suppliedName : "";
     const knownName = identifiers.map(value => identityNames.get(value)).find(Boolean);
-    return { ...mention, number: mention.number || recipient.number, uuid: mention.uuid || recipient.uuid || recipient.aci, name: friendlyName || knownName || identifier || "Someone" };
+    const isSelf = identifiers.some(value => value && identityNames.get(value) === "Note to Self");
+    return { ...mention, number: mention.number || recipient.number, uuid: mention.uuid || recipient.uuid || recipient.aci, name: friendlyName || (isSelf ? selfProfileName || "You" : knownName) || identifier || "Someone" };
   });
 }
 function displayIdentity(value, fallback = "Unknown") {
@@ -98,6 +107,7 @@ try {
   appState = { ...appState, ...JSON.parse(await readFile(join(APP_DIR, "state.json"), "utf8")) };
   appState.settings = { sendReadReceipts: true, sendTypingIndicators: true, linkPreviews: true, defaultExpiration: 0, ...(appState.settings || {}) };
   appState.localNicknames ||= {};
+  selfProfileName = appState.selfProfileName || "";
 } catch {}
 
 function log(message, extra = "") {
@@ -242,6 +252,7 @@ function messageFromEnvelope(payload) {
   const envelope = payload?.envelope || payload?.params?.envelope || payload?.params?.result?.envelope;
   if (!envelope) return null;
   const account = payload?.account || payload?.params?.account || payload?.params?.result?.account;
+  if (envelope.sourceNumber === account || envelope.sourceUuid === account) rememberSelfProfileName(envelope.sourceName);
   const sync = envelope.syncMessage;
   const outgoing = sync?.sentMessage;
   const edit = outgoing?.editMessage || envelope.editMessage;
@@ -753,7 +764,9 @@ async function api(req, res, url) {
       if (!target) continue;
       const aliases = identifiers.map(identifier => `direct:${identifier}`);
       const noteToSelf = identifiers.includes(account);
-      const name = noteToSelf ? "Note to Self" : contactName(contact);
+      const profileName = contactName(contact);
+      if (noteToSelf && profileName !== account) rememberSelfProfileName(profileName);
+      const name = noteToSelf ? "Note to Self" : profileName;
       for (const identifier of identifiers) identityNames.set(identifier, name);
       const item = {
         id: `direct:${target}`,
