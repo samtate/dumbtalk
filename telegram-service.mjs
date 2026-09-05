@@ -637,6 +637,7 @@ export class TelegramService {
           if (!Number.isSafeInteger(id)) continue;
           const avatar = peer.photo?.big || peer.photo?.small || peer.photo;
           const avatarVersion = avatar?.uniqueFileId || avatar?.fileId || "current";
+          const details = this.detailCache.get(String(id))?.value;
           if (avatar) this.avatarSources.set(String(id), avatar);
           const last = dialog.lastMessage ? this.normalizeMessage(dialog.lastMessage, dialog) : null;
           values.push({
@@ -656,9 +657,9 @@ export class TelegramService {
               : null,
             blocked: false,
             expiration: Number(dialog.ttlPeriod || 0),
-            description: undefined,
-            members: [],
-            admins: [],
+            description: details?.description,
+            members: details?.members || [],
+            admins: details?.admins || [],
             permissions: {},
             readInboxMaxId: Number(dialog.lastReadIngoing || 0),
             readOutboxMaxId: Number(dialog.lastReadOutgoing || 0),
@@ -725,6 +726,12 @@ export class TelegramService {
     }
 
     this.detailCache.set(String(resolvedTarget), { at: Date.now(), value });
+    const dialog = this.cachedConversation(resolvedTarget);
+    if (dialog) {
+      dialog.description = value.description;
+      dialog.members = value.members;
+      dialog.admins = value.admins;
+    }
     return value;
   }
 

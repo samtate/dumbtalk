@@ -43,6 +43,11 @@ type WhatsAppMessage = {
 	forwardedFrom?: string;
 	attachments?: WhatsAppAttachment[];
 	status?: 'sent' | 'delivered' | 'read';
+	receipt?: {
+		state: 'delivered' | 'read';
+		at?: number;
+		recipients?: Record<string, { state: 'delivered' | 'read'; at?: number }>;
+	};
 	reactions?: { emoji: string; author: string; own: boolean }[];
 	poll?: {
 		question: string;
@@ -90,7 +95,18 @@ function messageFromWhatsApp(message: WhatsAppMessage): UniversalMessage {
 			author: reaction.author,
 			isOwn: reaction.own,
 		})),
-		receipt: message.direction === 'out' ? { state: message.status ?? 'sent' } : undefined,
+		receipt:
+			message.direction === 'out'
+				? {
+						state: message.status ?? 'sent',
+						updatedAt: message.receipt?.at,
+						readBy: Object.entries(message.receipt?.recipients ?? {}).map(([name, receipt]) => ({
+							name,
+							status: receipt.state,
+							at: receipt.at,
+						})),
+					}
+				: undefined,
 		edited: message.edited,
 		deleted: message.deleted,
 		forwardedFrom: message.forwardedFrom,

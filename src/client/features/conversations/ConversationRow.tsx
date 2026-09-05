@@ -75,14 +75,58 @@ function PreviewReceipt({ message }: { message?: UniversalMessage }) {
 	return <span class={className}>{mark}</span>;
 }
 
+function memberAvatarPath(conversation: UniversalConversation, memberId: string) {
+	if (conversation.serviceId === 'signal') {
+		return `/api/avatar/direct/${encodeURIComponent(memberId)}`;
+	}
+	if (conversation.serviceId === 'telegram') {
+		return `/api/services/telegram/avatar/${encodeURIComponent(memberId)}`;
+	}
+	return undefined;
+}
+
+function MemberTile({
+	conversation,
+	memberId,
+	memberName,
+}: {
+	conversation: UniversalConversation;
+	memberId: string;
+	memberName: string;
+}) {
+	const source = useProtectedImage(memberAvatarPath(conversation, memberId));
+
+	return <span class={styles.memberTile}>{source ? <img src={source} alt="" /> : initials(memberName)}</span>;
+}
+
+function MemberMosaic({ conversation }: { conversation: UniversalConversation }) {
+	const members = conversation.members.slice(0, 4);
+	if (members.length < 2) return null;
+
+	return (
+		<span class={styles.memberMosaic} aria-label={`${conversation.title} members`}>
+			{members.map((member) => (
+				<MemberTile
+					key={member.id}
+					conversation={conversation}
+					memberId={member.id}
+					memberName={member.name}
+				/>
+			))}
+		</span>
+	);
+}
+
 function Avatar({ conversation }: { conversation: UniversalConversation }) {
 	const source = useProtectedImage(conversation.avatarPath);
 	const className = `${styles.avatar} ${conversation.isNoteToSelf ? styles.noteAvatar : ''}`;
+	const showMosaic = !source && conversation.kind === 'group' && conversation.members.length >= 2;
 
 	return (
 		<span class={className} aria-hidden="true">
 			{conversation.isNoteToSelf ? '🔖' : initials(conversation.title)}
 			{source && <img src={source} alt="" />}
+			{showMosaic && <MemberMosaic conversation={conversation} />}
 			{conversation.unreadCount > 0 && <span class={styles.unread}>{conversation.unreadCount}</span>}
 		</span>
 	);

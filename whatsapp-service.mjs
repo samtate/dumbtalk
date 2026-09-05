@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS = {
   linkPreviews: true,
   defaultExpiration: 0,
 };
+const MAX_STORED_RECEIPTS = 5_000;
 
 function delay(milliseconds) {
   return new Promise(resolve => setTimeout(resolve, milliseconds));
@@ -71,6 +72,14 @@ function webhookJid(value) {
   return typeof value === "string" ? value : value?.User && value?.Server ? `${value.User}@${value.Server}` : "";
 }
 
+function receiptState(type) {
+  return type === "read" || type === "played" ? "read" : "delivered";
+}
+
+function isLaterReceiptState(next, current) {
+  return next === "read" || current !== "read";
+}
+
 export class WhatsAppService {
   constructor({ dataDir, log }) {
     this.dataDir = join(dataDir, "whatsapp");
@@ -84,11 +93,12 @@ export class WhatsAppService {
     this.pairCode = null;
     this.lastError = null;
     this.accountLabel = null;
-    this.state = { favourites: [], settings: { ...DEFAULT_SETTINGS } };
+    this.state = { favourites: [], settings: { ...DEFAULT_SETTINGS }, receipts: {} };
     this.dialogCache = { at: 0, values: [] };
     this.messageCache = new Map();
     this.webhookSecret = randomBytes(32).toString("hex");
     this.receipts = new Map();
+    this.receiptPersistTimer = null;
     this.typing = new Map();
   }
 
@@ -104,14 +114,42 @@ export class WhatsAppService {
         ...this.state,
         ...saved,
         settings: { ...DEFAULT_SETTINGS, ...(saved.settings || {}) },
+        receipts: saved.receipts && typeof saved.receipts === "object" ? saved.receipts : {},
       };
     } catch {}
+    for (const [key, receipt] of Object.entries(this.state.receipts)) {
+      if (!receipt || typeof receipt !== "object") continue;
+      const state = receipt.state === "read" ? "read" : "delivered";
+      this.receipts.set(key, {
+        state,
+        at: timestamp(receipt.at),
+        recipients: receipt.recipients && typeof receipt.recipients === "object" ? receipt.recipients : {},
+      });
+    }
+    this.trimReceipts();
     await this.refreshStatus();
     if (this.isLinked()) this.startSync();
   }
 
   async persistState() {
     await writeFile(this.statePath, JSON.stringify(this.state), { mode: 0o600 });
+  }
+
+  trimReceipts() {
+    if (this.receipts.size <= MAX_STORED_RECEIPTS) return;
+    const oldest = [...this.receipts.entries()]
+      .sort(([, left], [, right]) => (left.at || 0) - (right.at || 0))
+      .slice(0, this.receipts.size - MAX_STORED_RECEIPTS);
+    for (const [key] of oldest) this.receipts.delete(key);
+  }
+
+  scheduleReceiptPersist() {
+    if (this.receiptPersistTimer) return;
+    this.receiptPersistTimer = setTimeout(() => {
+      this.receiptPersistTimer = null;
+      this.state.receipts = Object.fromEntries(this.receipts);
+      this.persistState().catch(error => this.log("persist WhatsApp receipts", error.message));
+    }, 250);
   }
 
   isLinked() {
@@ -361,6 +399,7 @@ export class WhatsAppService {
       reactions: [],
       poll: undefined,
       status: this.receipts.get(`${chatJid}:${id}`)?.state || "sent",
+      receipt: this.receipts.get(`${chatJid}:${id}`),
     };
     this.messageCache.set(`${chatJid}:${id}`, { ...result, chatName });
     return result;
@@ -627,8 +666,27 @@ export class WhatsAppService {
     }
     if (event.EventType === "receipt") {
       const chat = webhookJid(event.Chat);
-      const state = event.Type === "read" || event.Type === "played" ? "read" : "delivered";
-      for (const id of asArray(event.MessageIDs)) this.receipts.set(`${chat}:${id}`, { state, at: timestamp(event.Timestamp) });
+      const sender = webhookJid(event.Sender);
+      const state = receiptState(event.Type);
+      const at = timestamp(event.Timestamp);
+      for (const id of asArray(event.MessageIDs)) {
+        const key = `${chat}:${id}`;
+        const previous = this.receipts.get(key);
+        const recipient = previous?.recipients?.[sender];
+        const recipients = {
+          ...(previous?.recipients || {}),
+          ...(sender && isLaterReceiptState(state, recipient?.state)
+            ? { [sender]: { state, at } }
+            : {}),
+        };
+        this.receipts.set(key, {
+          state: isLaterReceiptState(state, previous?.state) ? state : previous.state,
+          at: Math.max(at, previous?.at || 0),
+          recipients,
+        });
+      }
+      this.trimReceipts();
+      this.scheduleReceiptPersist();
     }
     this.dialogCache.at = 0;
     return this.json(res, 204, {});
