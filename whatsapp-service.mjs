@@ -190,6 +190,12 @@ export class WhatsAppService {
     return this.run(["--lock-wait", "20s", ...args]);
   }
 
+  // wacli's sync daemon exposes a send socket. Do not wait on its store lock:
+  // an immediate lock result makes wacli delegate the send to that live daemon.
+  runSend(args) {
+    return this.run(args);
+  }
+
   async beginSetup(phone = "") {
     if (this.isLinked()) return this.statusPayload();
     const normalizedPhone = String(phone).replace(/[\s().-]/g, "");
@@ -441,10 +447,10 @@ export class WhatsAppService {
     const target = safeJid(input.target);
     const text = String(input.message || "").trim();
     if (!text || text.length > 4000) throw new Error("Message must be 1–4000 characters");
-    const args = ["--lock-wait", "20s", "send", "text", "--to", target, "--message", text];
+    const args = ["send", "text", "--to", target, "--message", text];
     if (input.replyToId) args.push("--reply-to", safeMessageId(input.replyToId));
     if (input.replyToSender) args.push("--reply-to-sender", safeJid(input.replyToSender));
-    const result = await this.runWrite(args.slice(2));
+    const result = await this.runSend(args);
     this.dialogCache.at = 0;
     return {
       id: String(result.id || randomUUID()),
@@ -462,9 +468,9 @@ export class WhatsAppService {
   async sendReaction(input) {
     const target = safeJid(input.target);
     const message = this.cachedMessage(target, safeMessageId(input.messageId));
-    const args = ["--lock-wait", "20s", "send", "react", "--to", target, "--id", safeMessageId(input.messageId), "--reaction", input.remove ? "" : String(input.emoji || "")];
+    const args = ["send", "react", "--to", target, "--id", safeMessageId(input.messageId), "--reaction", input.remove ? "" : String(input.emoji || "")];
     if (isGroup(target) && message?.senderId) args.push("--sender", safeJid(message.senderId));
-    await this.runWrite(args.slice(2));
+    await this.runSend(args);
   }
 
   async updateConversation(input) {
@@ -576,7 +582,7 @@ export class WhatsAppService {
     for await (const chunk of req) parts.push(chunk);
     await writeFile(tempPath, Buffer.concat(parts), { mode: 0o600 });
     try {
-      await this.runWrite(["send", "file", "--to", target, "--file", tempPath, "--filename", filename, "--caption", caption]);
+      await this.runSend(["send", "file", "--to", target, "--file", tempPath, "--filename", filename, "--caption", caption]);
       this.dialogCache.at = 0;
       return this.json(res, 200, { sent: true });
     } finally {

@@ -2,13 +2,5 @@
 	display: block;
 	width: 1em;
 	height: 1em;
-	fill: none;
-	stroke: currentColor;
-	stroke-linecap: round;
-	stroke-linejoin: round;
-	stroke-width: 1.7;
+	object-fit: contain;
 }
-
-.signal { color: #fff; }
-.telegram { color: #fff; }
-.whatsapp { color: #fff; }
