@@ -125,9 +125,19 @@ export class WhatsAppService {
     }
     try {
       const result = await this.run(["--read-only", "auth", "status"]);
-      this.accountLabel = result.linked_jid || result.phone || null;
-    } catch {
-      this.accountLabel = null;
+      if (result.authenticated) {
+        // The session is already valid when WhatsApp acknowledges the pairing.
+        // A linked JID can arrive a fraction later, so retain a neutral label
+        // rather than leaving the setup screen stuck at "Waiting".
+        this.accountLabel = result.linked_jid || result.phone || this.accountLabel || "WhatsApp";
+      } else {
+        this.accountLabel = null;
+      }
+    } catch (error) {
+      // A newly-created SQLite store can briefly be unavailable while wacli
+      // writes its paired-device record. Do not discard a confirmed link for a
+      // transient read failure.
+      if (!this.accountLabel) this.log("wacli auth status", error.message);
     }
     return this.isLinked();
   }
@@ -194,7 +204,9 @@ export class WhatsAppService {
     this.qr = null;
     this.pairCode = null;
     this.authMethod = authMethod;
-    const authArgs = ["--store", this.dataDir, "--events", "auth", "--download-media"];
+    // --events belongs to the auth command. It makes QR and phone-pair codes
+    // machine-readable on stderr while retaining wacli's normal auth flow.
+    const authArgs = ["--store", this.dataDir, "auth", "--events", "--download-media"];
     if (normalizedPhone) authArgs.push("--phone", normalizedPhone);
     else authArgs.push("--qr-format", "text");
 
@@ -258,7 +270,11 @@ export class WhatsAppService {
 
   async pollSetup() {
     const deadline = Date.now() + 20_000;
-    while (Date.now() < deadline && this.authProcess && !this.isLinked()) await delay(250);
+    while (Date.now() < deadline && this.authProcess && !this.isLinked()) {
+      await this.refreshStatus();
+      if (this.isLinked()) break;
+      await delay(500);
+    }
     await this.refreshStatus();
     return this.statusPayload();
   }
