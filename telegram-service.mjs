@@ -144,7 +144,7 @@ function inputTarget(value) {
 }
 
 export class TelegramService {
-  constructor({ dataDir, apiId, apiHash, log }) {
+  constructor({ dataDir, apiId, apiHash, log, onIncoming }) {
     this.dataDir = join(dataDir, "telegram");
     this.mediaDir = join(this.dataDir, "media");
     this.statePath = join(this.dataDir, "state.json");
@@ -152,6 +152,8 @@ export class TelegramService {
     this.apiId = Number(apiId);
     this.apiHash = apiHash;
     this.log = log;
+    this.onIncoming = onIncoming;
+    this.pushedMessageIds = new Set();
     this.configured = Number.isSafeInteger(this.apiId) && this.apiId > 0 && Boolean(apiHash);
     this.client = null;
     this.me = null;
@@ -227,11 +229,16 @@ export class TelegramService {
   bindUpdates() {
     this.client.onNewMessage.add(message => {
       const dialog = this.cachedConversation(peerId(message.chat));
+      const normalized = this.normalizeMessage(message, dialog);
+      if (normalized.direction === "in" && Date.now() - normalized.timestamp < 5 * 60_000 && !this.pushedMessageIds.has(normalized.id)) {
+        this.pushedMessageIds.add(normalized.id);
+        if (this.pushedMessageIds.size > 512) this.pushedMessageIds.delete(this.pushedMessageIds.values().next().value);
+        this.onIncoming?.();
+      }
       if (!dialog) {
         this.invalidateMessageViews();
         return;
       }
-      const normalized = this.normalizeMessage(message, dialog);
       dialog.last = normalized;
       if (normalized.direction === "in") dialog.unread += 1;
       this.dialogCache.at = Date.now();

@@ -48,6 +48,16 @@ phone itself—fetch and process the widget, so the final widget URL must be pub
 For public HTTPS, CGNAT-friendly options, and the CloudPhone developer-site steps,
 follow **[Setup and deployment](docs/setup.md)**.
 
+## Android keypad phones
+
+The [Android frontend](android/README.md) uses the same interface and D-pad navigation on phones
+such as the Qin F22 Pro. It connects directly to your existing DumbTalk backend over HTTPS; the
+messaging accounts remain on the server. Build the APK from the `android` project, install it on
+the phone, and paste your complete widget URL, including its `#` access key.
+
+The Android app can receive message notifications through UnifiedPush. Install a distributor on
+the phone and run a backend image built from this version of the source before enabling push.
+
 ## Important limitations
 
 - Signal cannot sync earlier history to a newly linked device. DumbTalk shows only messages sent
@@ -67,6 +77,10 @@ DOM, and send the result to the phone. The widget URL must therefore be reachabl
 internet over HTTPS. A LAN address can be used by the owner during setup, but never as the final
 widget URL. See [Setup and deployment](docs/setup.md) for options that work behind CGNAT without
 port forwarding.
+
+The Android app connects directly from the phone, so its HTTPS address only needs to be reachable
+from that phone. A private HTTPS address can work if the phone trusts its certificate and can reach
+the server on Wi-Fi or through a VPN.
 
 ### What does the `#...` part of the widget URL do?
 
@@ -122,6 +136,9 @@ as well: the published ranges can change, and an IP allowlist is not a replaceme
 authentication. The [setup guide](docs/setup.md#3-restrict-access-to-cloudphones-servers) contains
 the current ranges and instructions for Caddy, Cloudflare Tunnel, and Tailscale Funnel.
 
+If you also use the Android app, allow the phone to reach the HTTPS UI and API. A CloudMosa-only
+IP rule would block it; you can use a separate HTTPS hostname or add a suitable exception.
+
 ### What happens if I lose the widget URL?
 
 The generated token remains in `data/app/config.json`. A server administrator can read it locally
@@ -154,6 +171,8 @@ filesystem snapshot so the service databases remain consistent. Test restoration
 assuming a backup is usable.
 
 ## Development
+
+For the Android keypad frontend, see [android/README.md](android/README.md).
 
 ```sh
 npm install

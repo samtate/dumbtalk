@@ -12,7 +12,8 @@
   "dependencies": {
     "@mtcute/node": "^0.31.0",
     "preact": "^10.29.8",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "web-push": "3.6.7"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.6",

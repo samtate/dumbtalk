@@ -31,7 +31,7 @@ jobs:
 
       - name: Test
         run: |
-          npm ci --ignore-scripts
+          npm install --ignore-scripts
           node --check server.mjs
           npm test
 

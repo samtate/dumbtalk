@@ -121,6 +121,10 @@ Then recreate the container with `docker compose up -d`.
 
 ## 3. Restrict access to CloudPhone's servers
 
+This section applies to the CloudPhone widget. The Android app connects directly from the phone,
+so a CloudMosa-only IP allowlist also blocks Android. If you use both frontends, allow the phone
+to reach the HTTPS UI and API or give Android a separate HTTPS hostname.
+
 Where possible, configure the public entry point to accept widget requests only from CloudMosa's
 published data-centre addresses. This substantially reduces DumbTalk's public attack surface, but
 is defence in depth rather than a replacement for the generated widget key.

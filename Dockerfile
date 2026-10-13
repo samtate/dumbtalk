@@ -4,7 +4,7 @@ FROM node:22-bookworm-slim AS client-build
 
 WORKDIR /build
 COPY package*.json ./
-RUN npm ci --ignore-scripts
+RUN npm install --ignore-scripts
 COPY tsconfig.client.json vite.config.ts ./
 COPY src/client ./src/client
 RUN npm run typecheck:client && npm run build:client
@@ -54,6 +54,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --omit=dev && npm cache clean --force
 COPY server.mjs ./
+COPY push-service.mjs ./
 COPY telegram-service.mjs ./
 COPY whatsapp-service.mjs ./
 COPY signal-cli-updater.mjs ./

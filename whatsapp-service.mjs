@@ -81,11 +81,13 @@ function isLaterReceiptState(next, current) {
 }
 
 export class WhatsAppService {
-  constructor({ dataDir, log }) {
+  constructor({ dataDir, log, onIncoming }) {
     this.dataDir = join(dataDir, "whatsapp");
     this.mediaDir = join(this.dataDir, "media");
     this.statePath = join(this.dataDir, "state.json");
     this.log = log;
+    this.onIncoming = onIncoming;
+    this.pushedMessageIds = new Set();
     this.authProcess = null;
     this.authMethod = null;
     this.syncProcess = null;
@@ -659,6 +661,13 @@ export class WhatsAppService {
       return this.json(res, 401, { error: "Unauthorized" });
     }
     const event = JSON.parse(raw.toString("utf8"));
+    if (!event.EventType && event.FromMe === false && event.ID && Date.now() - timestamp(event.Timestamp) < 5 * 60_000) {
+      if (!this.pushedMessageIds.has(event.ID)) {
+        this.pushedMessageIds.add(event.ID);
+        if (this.pushedMessageIds.size > 512) this.pushedMessageIds.delete(this.pushedMessageIds.values().next().value);
+        this.onIncoming?.();
+      }
+    }
     if (event.EventType === "chat_presence" && event.State === "composing") {
       const chat = webhookJid(event.Chat);
       const sender = webhookJid(event.Sender) || "Someone";

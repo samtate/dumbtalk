@@ -55,10 +55,19 @@ export function SoftkeyProvider({ children }: { children: ComponentChildren }) {
 	const contextValue = useMemo<ContextValue>(() => ({ push }), [push]);
 
 	useEffect(() => {
-		const invoke = (key: Softkey) => {
+		const invoke = (key: Softkey): 'handled' | 'exit' | 'missing' => {
 			const action = currentConfig(stackRef.current)[key];
 			action?.onPress();
+			if (!action) return 'missing';
+			return action.label === 'Exit' ? 'exit' : 'handled';
 		};
+
+		// The Android host calls this for hardware softkeys. Keep the action
+		// in the same stack used by the visible CloudPhone softkey bar.
+		const androidWindow = window as Window & {
+			dumbtalkAndroidSoftkey?: (key: Softkey) => 'handled' | 'exit' | 'missing';
+		};
+		androidWindow.dumbtalkAndroidSoftkey = invoke;
 
 		const onKeyDown = (event: KeyboardEvent) => {
 			const key: Softkey | undefined =
@@ -82,6 +91,7 @@ export function SoftkeyProvider({ children }: { children: ComponentChildren }) {
 		window.addEventListener('keydown', onKeyDown);
 		window.addEventListener('back', onBack);
 		return () => {
+			delete androidWindow.dumbtalkAndroidSoftkey;
 			window.removeEventListener('keydown', onKeyDown);
 			window.removeEventListener('back', onBack);
 		};

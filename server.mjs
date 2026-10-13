@@ -8,6 +8,7 @@ import QRCode from "qrcode";
 import { prepareSignalCli, rollBackSignalCli } from "./signal-cli-updater.mjs";
 import { TelegramService } from "./telegram-service.mjs";
 import { WhatsAppService } from "./whatsapp-service.mjs";
+import { createPushService } from "./push-service.mjs";
 
 const PORT = Number(process.env.PORT || 8080);
 const DATA_DIR = process.env.DATA_DIR || "/data";
@@ -47,6 +48,7 @@ function rememberSelfProfileName(name) {
 }
 const viewOnceTokens = new Map();
 let stateWrite = Promise.resolve();
+let configWrite = Promise.resolve();
 await mkdir(APP_DIR, { recursive: true });
 await mkdir(MEDIA_DIR, { recursive: true });
 await mkdir(SIGNAL_DIR, { recursive: true });
@@ -58,15 +60,19 @@ if (widgetToken && Buffer.byteLength(widgetToken) < 43) {
   throw new Error("WIDGET_TOKEN override must be a 256-bit random base64url token");
 }
 
+const push = createPushService({ config: appConfig, persist: persistConfig, log });
+
 const telegram = new TelegramService({
   dataDir: DATA_DIR,
   apiId: process.env.TELEGRAM_API_ID,
   apiHash: process.env.TELEGRAM_API_HASH,
   log: (message, extra) => console.log(`[dumbtalk] ${message}`, extra || ""),
+  onIncoming: () => push.notifyIncoming(),
 });
 const whatsapp = new WhatsAppService({
   dataDir: DATA_DIR,
   log: (message, extra) => console.log(`[dumbtalk] ${message}`, extra || ""),
+  onIncoming: () => push.notifyIncoming(),
 });
 
 function versionAtLeast(version, minimum) {
@@ -474,6 +480,7 @@ async function processReceivePayload(payload, source) {
     }
     receiveStats.messages += 1;
     await persistMessages();
+    if (message.direction === "in" && !message.system && Date.now() - message.timestamp < 5 * 60_000) push.notifyIncoming();
   }
 }
 
@@ -573,9 +580,12 @@ async function body(req) {
 }
 
 async function persistConfig() {
-  const temporary = `${CONFIG_PATH}.tmp`;
-  await writeFile(temporary, JSON.stringify(appConfig), { mode: 0o600 });
-  await rename(temporary, CONFIG_PATH);
+  configWrite = configWrite.catch(() => {}).then(async () => {
+    const temporary = `${CONFIG_PATH}.tmp`;
+    await writeFile(temporary, JSON.stringify(appConfig), { mode: 0o600 });
+    await rename(temporary, CONFIG_PATH);
+  });
+  return configWrite;
 }
 
 async function setup(req, res, url) {
@@ -589,7 +599,7 @@ async function setup(req, res, url) {
     // Assignment happens before the first await, so simultaneous requests cannot
     // both claim a fresh installation in Node's single event loop.
     widgetToken = randomBytes(32).toString("base64url");
-    appConfig = { ...appConfig, widgetToken };
+    appConfig.widgetToken = widgetToken;
     try {
       await persistConfig();
     } catch (error) {
@@ -610,6 +620,25 @@ async function api(req, res, url) {
     return json(res, 404, { error: "Not found" });
   }
   if (req.method !== "GET" && !requireSameOrigin(req)) return json(res, 403, { error: "Origin rejected" });
+
+  if (url.pathname === "/api/push/vapid" && req.method === "GET") {
+    return json(res, 200, { publicKey: await push.ensureKeys() });
+  }
+  if (url.pathname === "/api/push/subscription" && req.method === "POST") {
+    try {
+      await push.register(await body(req), req.headers.origin);
+      return json(res, 200, { subscribed: true });
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  if (url.pathname === "/api/push/subscription" && req.method === "DELETE") {
+    try {
+      await push.unregister((await body(req)).deviceId);
+      return json(res, 200, { subscribed: false });
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  if (url.pathname === "/api/push/test" && req.method === "POST") {
+    return json(res, 200, await push.sendNow({ test: true, deviceId: (await body(req)).deviceId }));
+  }
 
   if (url.pathname.startsWith("/api/services/telegram")) {
     return telegram.handle(req, res, url, { body, json });
