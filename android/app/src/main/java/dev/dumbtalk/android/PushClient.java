@@ -32,6 +32,7 @@ final class PushClient {
     }
 
     static boolean isEnabled(Context context) { return prefs(context).getBoolean("enabled", false); }
+    static boolean hasEndpoint(Context context) { return prefs(context).getString("endpoint", null) != null; }
     static String status(Context context) { return prefs(context).getString("status", "Not configured"); }
     static void setStatus(Context context, String value) { prefs(context).edit().putString("status", value).apply(); }
 
