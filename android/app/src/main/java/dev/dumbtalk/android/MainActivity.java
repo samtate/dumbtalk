@@ -214,6 +214,9 @@ public final class MainActivity extends Activity {
         webView.setFocusableInTouchMode(true);
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
+        // Lets the shared web UI distinguish this keypad wrapper from CloudPhone.
+        webView.getSettings().setUserAgentString(
+                webView.getSettings().getUserAgentString() + " DumbTalkAndroid/1");
         webView.getSettings().setAllowFileAccess(false);
         webView.getSettings().setAllowContentAccess(true);
         webView.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);

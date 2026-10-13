@@ -31,7 +31,7 @@ The backend creates VAPID keys on first use and keeps them in `data/app/config.j
 | --- | --- |
 | D-pad | Existing DumbTalk focus navigation |
 | Centre / Enter | Activate focused control or enter text |
-| Left softkey / Menu | Current left softkey action |
+| 1 / Left softkey | Current left softkey action (`1=Menu`, `1=Reply`, etc.) |
 | Right softkey / Back | Current right softkey action |
 | Hold Back | Open the connection screen |
 | Number keys | Text input through the phone's installed input method |
@@ -39,6 +39,8 @@ The backend creates VAPID keys on first use and keeps them in `data/app/config.j
 The softkey labels in the web UI remain the source of truth for actions. Text entry depends on the phone's installed keypad input method.
 
 On the Qin F22 Pro, DumberOS assigns Menu to its notification panel by default. Its [key shortcut setting](https://dumbermini.com/blogs/news/learn-about-dumbdroid-development) can move the panel to another key; then DumbTalk can receive Menu for its left softkey. An Android app cannot take a key event that the system has already consumed. The on-screen left softkey also works while the DumberOS shortcut is enabled.
+
+In the Android wrapper, pressing `1` invokes the current left softkey action. It is ignored while a text field is focused so the number key remains available for typing. CloudPhone keeps its original key handling and labels.
 
 ## Device test checklist
 

@@ -11,6 +11,10 @@ export type SoftkeyAction = {
 
 export type SoftkeyConfig = Partial<Record<Softkey, SoftkeyAction>>;
 
+function isAndroidWrapper() {
+	return typeof navigator !== 'undefined' && navigator.userAgent.includes('DumbTalkAndroid/1');
+}
+
 type Entry = {
 	id: symbol;
 	config: SoftkeyConfig;
@@ -55,6 +59,7 @@ export function SoftkeyProvider({ children }: { children: ComponentChildren }) {
 	const contextValue = useMemo<ContextValue>(() => ({ push }), [push]);
 
 	useEffect(() => {
+		const androidWrapper = isAndroidWrapper();
 		const invoke = (key: Softkey): 'handled' | 'exit' | 'missing' => {
 			const action = currentConfig(stackRef.current)[key];
 			action?.onPress();
@@ -70,6 +75,15 @@ export function SoftkeyProvider({ children }: { children: ComponentChildren }) {
 		androidWindow.dumbtalkAndroidSoftkey = invoke;
 
 		const onKeyDown = (event: KeyboardEvent) => {
+			if (androidWrapper && event.code === 'Digit1' && !event.repeat) {
+				const target = event.target as HTMLElement | null;
+				const typing = target?.matches('input, textarea, [contenteditable="true"]');
+				if (!typing) {
+					event.preventDefault();
+					invoke('left');
+					return;
+				}
+			}
 			const key: Softkey | undefined =
 				event.code === 'ShiftLeft' || event.key === 'SoftLeft' || event.key === 'Escape'
 					? 'left'
@@ -102,7 +116,7 @@ export function SoftkeyProvider({ children }: { children: ComponentChildren }) {
 			{children}
 			<nav class={styles.bar} aria-label="Soft keys">
 				<button class={styles.button} type="button" onClick={config.left?.onPress}>
-					{config.left?.label ?? ''}
+					{config.left ? `${isAndroidWrapper() ? '1=' : ''}${config.left.label}` : ''}
 				</button>
 				<button class={styles.button} type="button" onClick={config.center?.onPress}>
 					{config.center?.label ?? ''}
