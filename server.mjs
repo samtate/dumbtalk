@@ -49,6 +49,7 @@ function rememberSelfProfileName(name) {
 }
 const viewOnceTokens = new Map();
 let stateWrite = Promise.resolve();
+let messageWrite = Promise.resolve();
 let configWrite = Promise.resolve();
 await mkdir(APP_DIR, { recursive: true });
 await mkdir(MEDIA_DIR, { recursive: true });
@@ -240,9 +241,13 @@ async function getAccount() {
 }
 
 async function persistMessages() {
-  const tmp = join(APP_DIR, "messages.json.tmp");
-  await writeFile(tmp, JSON.stringify(messages.slice(-MAX_MESSAGES)), { mode: 0o600 });
-  await rename(tmp, join(APP_DIR, "messages.json"));
+  const snapshot = JSON.stringify(messages.slice(-MAX_MESSAGES));
+  messageWrite = messageWrite.catch(() => {}).then(async () => {
+    const tmp = join(APP_DIR, "messages.json.tmp");
+    await writeFile(tmp, snapshot, { mode: 0o600 });
+    await rename(tmp, join(APP_DIR, "messages.json"));
+  });
+  return messageWrite;
 }
 
 async function persistState() {
