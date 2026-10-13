@@ -203,6 +203,7 @@ export class TelegramService {
       apiId: this.apiId,
       apiHash: this.apiHash,
       storage: join(this.dataDir, "session.sqlite"),
+      updates: { catchUp: true },
     });
     this.bindUpdates();
     await this.refreshAuthorization();
@@ -292,6 +293,7 @@ export class TelegramService {
     if (!this.client) return false;
     try {
       this.me = await this.client.getMe();
+      await this.client.start();
       this.auth.stage = "authorized";
       return true;
     } catch {
@@ -426,6 +428,7 @@ export class TelegramService {
     const result = await this.client.sendCode({ phone: normalized });
     if (result?.type === "user") {
       this.me = result;
+      await this.client.start();
       this.auth.stage = "authorized";
     } else {
       this.auth = {
@@ -446,6 +449,7 @@ export class TelegramService {
         phoneCodeHash: this.auth.phoneCodeHash,
         phoneCode: String(code || "").trim(),
       });
+      await this.client.start();
       this.auth.stage = "authorized";
     } catch (error) {
       if (errorCode(error).includes("SESSION_PASSWORD_NEEDED")) {
@@ -461,6 +465,7 @@ export class TelegramService {
   async submitPhonePassword(password) {
     if (this.auth.stage !== "password") throw new Error("Telegram is not waiting for a password");
     this.me = await this.client.checkPassword(String(password || ""));
+    await this.client.start();
     this.auth.stage = "authorized";
     return this.statusPayload();
   }
