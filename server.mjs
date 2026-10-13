@@ -36,6 +36,7 @@ let rpcSequence = 0;
 const receiveStats = { connected: false, events: 0, messages: 0, lastEventAt: null, lastError: null };
 const syncRequestedAccounts = new Set();
 const conversationAliases = new Map();
+const conversationDetails = new Map();
 const typingState = new Map();
 const identityNames = new Map();
 let selfProfileName = "";
@@ -332,6 +333,18 @@ function messageFromEnvelope(payload) {
   };
 }
 
+function notificationForMessage(message) {
+  const conversation = [...conversationAliases].find(([, aliases]) => aliases.has(message.conversationId))?.[0];
+  const item = conversation ? conversationDetails.get(conversation) : undefined;
+  const text = message.text || (message.attachments?.length ? "Attachment" : message.poll ? "Poll" : "New message");
+  return {
+    conversationId: conversation || message.conversationId,
+    title: item?.name || message.sender || "New message",
+    body: text,
+    avatarPath: item?.avatar || null,
+  };
+}
+
 function formatDuration(seconds) {
   if (seconds % 604800 === 0) return `${seconds / 604800} week${seconds === 604800 ? "" : "s"}`;
   if (seconds % 86400 === 0) return `${seconds / 86400} day${seconds === 86400 ? "" : "s"}`;
@@ -480,7 +493,9 @@ async function processReceivePayload(payload, source) {
     }
     receiveStats.messages += 1;
     await persistMessages();
-    if (message.direction === "in" && !message.system && Date.now() - message.timestamp < 5 * 60_000) push.notifyIncoming();
+    if (message.direction === "in" && !message.system && Date.now() - message.timestamp < 5 * 60_000) {
+      push.notifyIncoming(notificationForMessage(message));
+    }
   }
 }
 
@@ -746,6 +761,7 @@ async function api(req, res, url) {
     };
     syncRequestedAccounts.delete(account);
     conversationAliases.clear();
+    conversationDetails.clear();
     typingState.clear();
     identityNames.clear();
     viewOnceTokens.clear();
@@ -773,6 +789,7 @@ async function api(req, res, url) {
     const allConversations = [];
     const archivedAliases = new Set();
     conversationAliases.clear();
+    conversationDetails.clear();
 
     const joinedName = (...values) => values.filter(Boolean).join(" ").trim();
     const contactName = contact =>
@@ -819,6 +836,7 @@ async function api(req, res, url) {
         identityChanged: identifiers.some(identifier => { const identity = identityByRecipient.get(identifier); return identity && (identity.trusted === false || String(identity.trustLevel || identity.trust || "").toLowerCase().includes("untrusted")); }),
       };
       allConversations.push(item);
+      conversationDetails.set(item.id, item);
       conversationAliases.set(item.id, new Set(aliases));
       for (const alias of aliases) {
         byAlias.set(alias, item);
@@ -828,6 +846,7 @@ async function api(req, res, url) {
     if (!allConversations.some(item => item.noteToSelf)) {
       const item = { id: `direct:${account}`, kind: "direct", target: account, name: "Note to Self", noteToSelf: true, archived: appState.archived.includes(`direct:${account}`), expiration: Number(appState.expirations[`direct:${account}`] || 0), avatar: null };
       allConversations.push(item);
+      conversationDetails.set(item.id, item);
       byAlias.set(item.id, item);
       conversationAliases.set(item.id, new Set([item.id]));
     }
@@ -856,6 +875,7 @@ async function api(req, res, url) {
         invited,
       };
       allConversations.push(item);
+      conversationDetails.set(item.id, item);
       byAlias.set(item.id, item);
       conversationAliases.set(item.id, new Set([item.id]));
       if (item.archived) archivedAliases.add(item.id);
@@ -868,6 +888,7 @@ async function api(req, res, url) {
         const fallbackTarget = target.join(":");
         const conversation = { id: item.conversationId, kind, target: fallbackTarget, name: identityNames.get(fallbackTarget) || item.sender || fallbackTarget, archived: appState.archived.includes(item.conversationId), avatar: `/api/avatar/${kind}/${encodeURIComponent(fallbackTarget)}` };
         allConversations.push(conversation);
+        conversationDetails.set(conversation.id, conversation);
         byAlias.set(item.conversationId, conversation);
         conversationAliases.set(conversation.id, new Set([conversation.id]));
       }

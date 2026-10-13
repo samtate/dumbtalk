@@ -69,6 +69,11 @@ type Screen =
 
 function UnifiedApp() {
 	const [screen, setScreen] = useState<Screen>({ name: 'conversations', archived: false });
+	useEffect(() => {
+		const android = (window as Window & { dumbtalkAndroid?: { set: (screen: string, conversationId: string) => void } }).dumbtalkAndroid;
+		if (!android) return;
+		android.set(screen.name, screen.name === 'chat' ? screen.conversation.id : '');
+	}, [screen]);
 
 	if (screen.name === 'services') {
 		return (

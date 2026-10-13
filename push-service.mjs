@@ -49,7 +49,7 @@ export function createPushService({ config, persist, log }) {
     await persist();
   }
 
-  async function sendNow({ test = false, deviceId } = {}) {
+  async function sendNow({ test = false, deviceId, payload = {} } = {}) {
     const subscriptions = (config.pushSubscriptions || []).filter(item => !deviceId || item.deviceId === deviceId);
     if (!subscriptions.length) return { sent: 0, failed: 0 };
     const publicKey = await ensureKeys();
@@ -65,7 +65,7 @@ export function createPushService({ config, persist, log }) {
       try {
         await webpush.sendNotification(
           { endpoint: item.endpoint, keys: { p256dh: item.p256dh, auth: item.auth } },
-          JSON.stringify({ event: test ? "test" : "new-message" }),
+          JSON.stringify({ event: test ? "test" : "new-message", ...payload }),
           {
             vapidDetails: { subject, publicKey, privateKey: config.pushVapid.privateKey },
             contentEncoding: "aes128gcm",
@@ -89,11 +89,15 @@ export function createPushService({ config, persist, log }) {
     return { sent, failed };
   }
 
-  function notifyIncoming() {
+  let pendingNotification;
+  function notifyIncoming(details) {
+    if (details) pendingNotification = details;
     if (timer || !(config.pushSubscriptions || []).length) return;
     timer = setTimeout(() => {
       timer = undefined;
-      void sendNow().catch(error => log("push delivery failed", error.message));
+      const payload = pendingNotification;
+      pendingNotification = undefined;
+      void sendNow({ payload }).catch(error => log("push delivery failed", error.message));
     }, 1_000);
   }
 

@@ -17,6 +17,7 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.DownloadListener;
+import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -39,6 +40,8 @@ public final class MainActivity extends Activity {
     private static final int AUDIO_REQUEST = 42;
     private static final int NOTIFICATION_REQUEST = 43;
     private static volatile boolean visible;
+    private static volatile String pushScreen;
+    private static volatile String pushConversation;
     private final ExecutorService network = Executors.newSingleThreadExecutor();
     private ConnectionStore connection;
     private WebView webView;
@@ -51,6 +54,18 @@ public final class MainActivity extends Activity {
     private boolean backOpenedSettings;
 
     static boolean isVisible() { return visible; }
+    static boolean suppressPush(String conversationId) {
+        if (!visible) return false;
+        if ("conversations".equals(pushScreen)) return true;
+        return "chat".equals(pushScreen) && conversationId != null && conversationId.equals(pushConversation);
+    }
+
+    private final class PushContextBridge {
+        @JavascriptInterface public void set(String screen, String conversationId) {
+            pushScreen = screen;
+            pushConversation = conversationId;
+        }
+    }
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -221,6 +236,7 @@ public final class MainActivity extends Activity {
         webView.getSettings().setAllowContentAccess(true);
         webView.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         webView.getSettings().setSafeBrowsingEnabled(true);
+        webView.addJavascriptInterface(new PushContextBridge(), "dumbtalkAndroid");
         webView.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 if (!request.isForMainFrame()) return false;
@@ -450,6 +466,8 @@ public final class MainActivity extends Activity {
 
     @Override protected void onPause() {
         visible = false;
+        pushScreen = null;
+        pushConversation = null;
         if (webView != null) webView.onPause();
         super.onPause();
     }
