@@ -233,7 +233,12 @@ export class TelegramService {
       if (normalized.direction === "in" && Date.now() - normalized.timestamp < 5 * 60_000 && !this.pushedMessageIds.has(normalized.id)) {
         this.pushedMessageIds.add(normalized.id);
         if (this.pushedMessageIds.size > 512) this.pushedMessageIds.delete(this.pushedMessageIds.values().next().value);
-        this.onIncoming?.();
+        this.onIncoming?.({
+          conversationId: normalized.conversationId,
+          title: dialog?.name || normalized.sender || "Telegram",
+          body: normalized.text || (normalized.attachments?.length ? "Attachment" : "New message"),
+          avatarPath: dialog?.avatar || null,
+        });
       }
       if (!dialog) {
         this.invalidateMessageViews();

@@ -665,7 +665,13 @@ export class WhatsAppService {
       if (!this.pushedMessageIds.has(event.ID)) {
         this.pushedMessageIds.add(event.ID);
         if (this.pushedMessageIds.size > 512) this.pushedMessageIds.delete(this.pushedMessageIds.values().next().value);
-        this.onIncoming?.();
+        const chat = webhookJid(event.Chat);
+        this.onIncoming?.({
+          conversationId: `whatsapp:${chat}`,
+          title: String(event.ChatName || event.PushName || chat || "WhatsApp"),
+          body: String(event.Body || event.Text || "New message"),
+          avatarPath: null,
+        });
       }
     }
     if (event.EventType === "chat_presence" && event.State === "composing") {

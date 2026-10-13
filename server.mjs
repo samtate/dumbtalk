@@ -68,12 +68,12 @@ const telegram = new TelegramService({
   apiId: process.env.TELEGRAM_API_ID,
   apiHash: process.env.TELEGRAM_API_HASH,
   log: (message, extra) => console.log(`[dumbtalk] ${message}`, extra || ""),
-  onIncoming: () => push.notifyIncoming(),
+  onIncoming: details => push.notifyIncoming(details),
 });
 const whatsapp = new WhatsAppService({
   dataDir: DATA_DIR,
   log: (message, extra) => console.log(`[dumbtalk] ${message}`, extra || ""),
-  onIncoming: () => push.notifyIncoming(),
+  onIncoming: details => push.notifyIncoming(details),
 });
 
 function versionAtLeast(version, minimum) {
