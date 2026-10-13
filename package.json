@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
+    "push:test": "node scripts/send-test-push.mjs",
     "test": "node --test",
     "typecheck:client": "tsc --project tsconfig.client.json --noEmit",
     "build:client": "vite build"
