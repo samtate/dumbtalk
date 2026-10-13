@@ -58,6 +58,7 @@ COPY push-service.mjs ./
 COPY telegram-service.mjs ./
 COPY whatsapp-service.mjs ./
 COPY signal-cli-updater.mjs ./
+COPY scripts ./scripts
 COPY --from=client-build /build/public-next ./public
 COPY docker-entrypoint.sh /usr/local/bin/cloudphone-signal-entrypoint
 
