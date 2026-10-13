@@ -235,7 +235,12 @@ export class TelegramService {
         this.pushedMessageIds.add(normalized.id);
         if (this.pushedMessageIds.size > 512) this.pushedMessageIds.delete(this.pushedMessageIds.values().next().value);
         this.onIncoming?.({
-          conversationId: normalized.conversationId,
+          conversationId: `telegram:${normalized.conversationId}`,
+          messageId: normalized.id,
+          timestamp: normalized.timestamp,
+          sender: normalized.sender || "Someone",
+          senderId: normalized.senderId || normalized.sender,
+          isGroup: dialog?.kind === "group" || conversationKind(message.chat) === "group",
           title: dialog?.name || normalized.sender || "Telegram",
           body: normalized.text || (normalized.attachments?.length ? "Attachment" : "New message"),
           avatarPath: dialog?.avatar || null,

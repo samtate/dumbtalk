@@ -52,6 +52,7 @@ public final class MainActivity extends Activity {
     private PermissionRequest audioRequest;
     private boolean pageFailed;
     private boolean backOpenedSettings;
+    private volatile String pendingPushChat = "";
 
     static boolean isVisible() { return visible; }
     static boolean suppressPush(String conversationId) {
@@ -60,15 +61,33 @@ public final class MainActivity extends Activity {
         return "chat".equals(pushScreen) && conversationId != null && conversationId.equals(pushConversation);
     }
 
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        pendingPushChat = intent.getStringExtra("conversationId");
+        if (webView != null) webView.evaluateJavascript("window.dispatchEvent(new Event('dumbtalk-open-chat'))", null);
+    }
+
     private final class PushContextBridge {
+        @JavascriptInterface public String pendingChat() { return pendingPushChat == null ? "" : pendingPushChat; }
+        @JavascriptInterface public void openedChat(String id) {
+            if (id.equals(pendingPushChat)) pendingPushChat = "";
+        }
+
         @JavascriptInterface public void set(String screen, String conversationId) {
             pushScreen = screen;
             pushConversation = conversationId;
+            if (visible) runOnUiThread(() -> {
+                android.app.NotificationManager manager = getSystemService(android.app.NotificationManager.class);
+                if ("conversations".equals(screen) && (pendingPushChat == null || pendingPushChat.isEmpty())) manager.cancelAll();
+                else if ("chat".equals(screen)) manager.cancel(conversationId, 1);
+            });
         }
     }
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        pendingPushChat = getIntent().getStringExtra("conversationId");
         getWindow().setStatusBarColor(Color.rgb(5, 10, 8));
         getWindow().setNavigationBarColor(Color.rgb(5, 10, 8));
         connection = new ConnectionStore(this);

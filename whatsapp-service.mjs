@@ -668,6 +668,11 @@ export class WhatsAppService {
         const chat = webhookJid(event.Chat);
         this.onIncoming?.({
           conversationId: `whatsapp:${chat}`,
+          messageId: event.ID,
+          timestamp: timestamp(event.Timestamp),
+          sender: String(event.PushName || event.Sender || "Someone"),
+          senderId: String(event.Sender || ""),
+          isGroup: chat.endsWith("@g.us"),
           title: String(event.ChatName || event.PushName || chat || "WhatsApp"),
           body: String(event.Body || event.Text || "New message"),
           avatarPath: null,

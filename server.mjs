@@ -338,15 +338,30 @@ function messageFromEnvelope(payload) {
   };
 }
 
-function notificationForMessage(message) {
+async function notificationForMessage(message) {
   const conversation = [...conversationAliases].find(([, aliases]) => aliases.has(message.conversationId))?.[0];
-  const item = conversation ? conversationDetails.get(conversation) : undefined;
+  let item = conversationDetails.get(conversation || message.conversationId);
+  if (!item && message.conversationId.startsWith("group:")) {
+    try {
+      const groups = await rpc("listGroups", { account: await getAccount() });
+      const group = groups.find(group => `group:${group.id}` === message.conversationId);
+      if (group) {
+        item = { name: group.name || "Signal group", avatar: `/api/avatar/group/${encodeURIComponent(group.id)}` };
+        conversationDetails.set(message.conversationId, item);
+      }
+    } catch (error) { log("push group lookup failed", error.message); }
+  }
   const text = message.text || (message.attachments?.length ? "Attachment" : message.poll ? "Poll" : "New message");
   return {
-    conversationId: conversation || message.conversationId,
+    conversationId: `signal:${conversation || message.conversationId}`,
+    messageId: message.id,
+    timestamp: message.timestamp,
+    sender: message.sender || "Someone",
+    senderId: message.senderId || message.sender,
+    isGroup: message.conversationId.startsWith("group:"),
     title: item?.name || message.sender || "New message",
     body: text,
-    avatarPath: item?.avatar || null,
+    avatarPath: item?.avatar || `/api/avatar/${message.conversationId.startsWith("group:") ? "group" : "direct"}/${encodeURIComponent(message.conversationId.slice(message.conversationId.indexOf(":") + 1))}`,
   };
 }
 
@@ -499,7 +514,7 @@ async function processReceivePayload(payload, source) {
     receiveStats.messages += 1;
     await persistMessages();
     if (message.direction === "in" && !message.system && Date.now() - message.timestamp < 5 * 60_000) {
-      push.notifyIncoming(notificationForMessage(message));
+      push.notifyIncoming(await notificationForMessage(message));
     }
   }
 }
@@ -1341,7 +1356,7 @@ async function api(req, res, url) {
     const kind = parts.shift();
     const target = decodeURIComponent(parts.join("/"));
     const prefix = kind === "group" ? "group-" : "profile-";
-    const path = join(SIGNAL_DIR, "avatars", basename(`${prefix}${target}`));
+    const path = join(SIGNAL_DIR, "avatars", basename(`${prefix}${target.replaceAll("/", "_")}`));
     const info = await stat(path).catch(() => null);
     if (!info?.isFile()) return json(res, 404, { error: "Avatar unavailable" });
     res.writeHead(200, { "content-type": "image/jpeg", "content-length": info.size, "cache-control": "private, max-age=3600", "x-content-type-options": "nosniff" });

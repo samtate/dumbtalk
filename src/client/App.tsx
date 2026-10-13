@@ -13,7 +13,7 @@ import { ConversationList } from './features/conversations/ConversationList';
 import { ServicesScreen } from './features/services/ServicesScreen';
 import { FocusProvider, useFocusManager } from './platform/Focus';
 import { SoftkeyProvider, useSoftkeys } from './platform/Softkeys';
-import { MessagingServiceProvider } from './services/ServiceContext';
+import { MessagingServiceProvider, useMessagingServices } from './services/ServiceContext';
 import type { UniversalConversation, UniversalSearchResult } from './services/contracts';
 import styles from './styles/App.module.scss';
 
@@ -69,6 +69,40 @@ type Screen =
 
 function UnifiedApp() {
 	const [screen, setScreen] = useState<Screen>({ name: 'conversations', archived: false });
+	const { services } = useMessagingServices();
+	useEffect(() => {
+		const android = (window as Window & { dumbtalkAndroid?: {
+			pendingChat?: () => string; openedChat?: (id: string) => void;
+		} }).dumbtalkAndroid;
+		if (!android?.pendingChat) return;
+		let cancelled = false;
+		let loading = false;
+		const openPending = async () => {
+			const id = android.pendingChat!();
+			if (!id || loading) return;
+			const service = services.find(item => id.startsWith(item.id + ':'));
+			if (!service) return;
+			loading = true;
+			try {
+				let conversation: UniversalConversation | undefined;
+				for (const archived of [false, true]) {
+					const page = await service.listConversations({ archived });
+					conversation = page.conversations.find(item => item.id === id);
+					if (conversation) break;
+				}
+				if (!cancelled && conversation && android.pendingChat!() === id) {
+					setScreen({ name: 'chat', conversation });
+					android.openedChat?.(id);
+				}
+			} catch { /* Keep the intent pending so a reconnect can retry. */ }
+			finally { loading = false; }
+		};
+		void openPending();
+		window.addEventListener('dumbtalk-open-chat', openPending);
+		const retry = window.setInterval(openPending, 3000);
+		return () => { cancelled = true; window.clearInterval(retry); window.removeEventListener('dumbtalk-open-chat', openPending); };
+	}, [services]);
+
 	useEffect(() => {
 		const android = (window as Window & { dumbtalkAndroid?: { set: (screen: string, conversationId: string) => void } }).dumbtalkAndroid;
 		if (!android) return;

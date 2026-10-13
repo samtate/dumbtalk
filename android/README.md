@@ -23,7 +23,7 @@ The app requires HTTPS. If the existing CloudPhone URL is restricted to CloudMos
 
 You can also trigger a test from the running backend container. From the DumbTalk app directory, run `npm run push:test` to send to every registered device, or `npm run push:test -- DEVICE_ID` for one device. The command prints `{"sent":1,"failed":0}` on success. It reads the device IDs from `/data/app/config.json`; run it after the phone has completed notification registration.
 
-The backend sends an encrypted `new-message` event after a fresh incoming message. The Android notification shows the conversation name and message preview, and fetches the contact or group avatar directly from your DumbTalk server. Mozilla only relays the encrypted payload. Nearby incoming events are coalesced for one second. While the conversation list is open, notifications are suppressed; while a chat is open, only notifications for that chat are suppressed. **Disable notifications** unregisters the phone and removes its backend subscription.
+The backend sends an encrypted `new-message` event after a fresh incoming message. The Android notification shows the conversation name and message preview, and fetches the contact or group avatar directly from your DumbTalk server. Mozilla only relays the encrypted payload. Each chat has its own expandable Android MessagingStyle notification, showing group sender names and the latest 25 messages. Tapping opens that conversation. Text appears immediately; the chat photo is added without a second alert when available, with an initial as fallback. Message history is taken from Android’s active notifications so it survives app process restarts and clears when dismissed or opened. Every message is sent separately; pending pushes are retained for up to one hour. While the conversation list is open, notifications are suppressed; while a chat is open, only notifications for that chat are suppressed. **Disable notifications** unregisters the phone and removes its backend subscription.
 
 The backend creates VAPID keys on first use and keeps them in `data/app/config.json`. Keep that file in backups; losing it invalidates existing push registrations. `PUSH_VAPID_SUBJECT` is optional and can be set to `mailto:you@example.com` or the server's HTTPS origin; otherwise DumbTalk uses the origin provided during registration. Your HTTPS reverse proxy must accept direct requests from the Android phone.
 
@@ -53,3 +53,12 @@ In the Android wrapper, pressing `1` invokes the current left softkey action. It
 - Test Back from each screen, reconnect after losing network, and setup after holding Back.
 - Enable UnifiedPush, test a push with the app in the background, and check that a new message from each connected service triggers a notification.
 - Repeat on both Wi-Fi and mobile data if the server is exposed beyond the LAN.
+
+### Testing conversation notifications
+
+With the app in the background, send three messages to one chat and one to another.
+Verify two separate notifications, sender names in the group, the latest preview when
+collapsed, and chronological messages when expanded. Tap each notification and verify
+its chat opens, including when DumbTalk has no running process. Dismiss a notification
+and verify the next message starts a fresh history. Repeat with the screen locked and
+on mobile data. The generic test button checks delivery but does not simulate chat history.

@@ -2,6 +2,17 @@ import webpush from "web-push";
 
 const MAX_DEVICES = 8;
 
+function encodedPayload(test, payload) {
+  const result = { ...payload, event: test ? "test" : "new-message" };
+  for (const field of ["title", "sender", "body"]) {
+    if (typeof result[field] === "string") result[field] = [...result[field]].slice(0, field === "body" ? 700 : 100).join("");
+  }
+  while (Buffer.byteLength(JSON.stringify(result)) > 3500 && result.body?.length) {
+    result.body = [...result.body].slice(0, -20).join("");
+  }
+  return JSON.stringify(result);
+}
+
 function validSubscription(input) {
   if (!input || typeof input !== "object") return false;
   const { deviceId, endpoint, p256dh, auth } = input;
@@ -18,7 +29,7 @@ function validSubscription(input) {
 }
 
 export function createPushService({ config, persist, log }) {
-  let timer;
+  let delivery = Promise.resolve();
 
   async function ensureKeys() {
     if (!config.pushVapid?.publicKey || !config.pushVapid?.privateKey) {
@@ -65,13 +76,12 @@ export function createPushService({ config, persist, log }) {
       try {
         await webpush.sendNotification(
           { endpoint: item.endpoint, keys: { p256dh: item.p256dh, auth: item.auth } },
-          JSON.stringify({ event: test ? "test" : "new-message", ...payload }),
+          encodedPayload(test, payload),
           {
             vapidDetails: { subject, publicKey, privateKey: config.pushVapid.privateKey },
             contentEncoding: "aes128gcm",
-            TTL: 120,
+            TTL: 3600,
             urgency: "high",
-            topic: "dumbtalk-message",
             timeout: 8_000,
           },
         );
@@ -89,16 +99,11 @@ export function createPushService({ config, persist, log }) {
     return { sent, failed };
   }
 
-  let pendingNotification;
-  function notifyIncoming(details) {
-    if (details) pendingNotification = details;
-    if (timer || !(config.pushSubscriptions || []).length) return;
-    timer = setTimeout(() => {
-      timer = undefined;
-      const payload = pendingNotification;
-      pendingNotification = undefined;
-      void sendNow({ payload }).catch(error => log("push delivery failed", error.message));
-    }, 1_000);
+  function notifyIncoming(details = {}) {
+    // Preserve every message, including messages from different conversations.
+    delivery = delivery.catch(() => {}).then(() => sendNow({ payload: details }))
+      .catch(error => log("push delivery failed", error.message));
+    return delivery;
   }
 
   return { ensureKeys, register, unregister, sendNow, notifyIncoming };
