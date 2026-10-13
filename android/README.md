@@ -36,7 +36,9 @@ The backend creates VAPID keys on first use and keeps them in `data/app/config.j
 | Hold Back | Open the connection screen |
 | Number keys | Text input through the phone's installed input method |
 
-The softkey labels in the web UI remain the source of truth for actions. The F22 Pro's actual key codes should be checked on hardware; some firmware variants remap physical keys. Text entry depends on the phone's installed keypad input method.
+The softkey labels in the web UI remain the source of truth for actions. Text entry depends on the phone's installed keypad input method.
+
+On the Qin F22 Pro, DumberOS assigns Menu to its notification panel by default. Its [key shortcut setting](https://dumbermini.com/blogs/news/learn-about-dumbdroid-development) can move the panel to another key; then DumbTalk can receive Menu for its left softkey. An Android app cannot take a key event that the system has already consumed. The on-screen left softkey also works while the DumberOS shortcut is enabled.
 
 ## Device test checklist
 
