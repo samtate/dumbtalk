@@ -25,6 +25,13 @@ body {
 	overflow-x: hidden;
 }
 
+@media (min-width: 321px) and (max-width: 600px) {
+	body {
+		max-width: none;
+		border-inline: 0;
+	}
+}
+
 #app {
 	height: calc(100% - 24px);
 	overflow: auto;
