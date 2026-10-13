@@ -498,6 +498,9 @@ public final class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         visible = true;
-        if (webView != null) webView.onResume();
+        if (webView != null) {
+            webView.onResume();
+            webView.evaluateJavascript("window.dispatchEvent(new Event('dumbtalk-resume'))", null);
+        }
     }
 }

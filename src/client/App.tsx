@@ -106,7 +106,10 @@ function UnifiedApp() {
 	useEffect(() => {
 		const android = (window as Window & { dumbtalkAndroid?: { set: (screen: string, conversationId: string) => void } }).dumbtalkAndroid;
 		if (!android) return;
-		android.set(screen.name, screen.name === 'chat' ? screen.conversation.id : '');
+		const report = () => android.set(screen.name, screen.name === 'chat' ? screen.conversation.id : '');
+		report();
+		window.addEventListener('dumbtalk-resume', report);
+		return () => window.removeEventListener('dumbtalk-resume', report);
 	}, [screen]);
 
 	if (screen.name === 'services') {
