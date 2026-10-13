@@ -577,6 +577,9 @@ function allowInvalidTokenAttempt(req) {
   const now = Date.now(); const ip = requestIp(req);
   const attempt = invalidTokenAttempts.get(ip) || { count: 0, resetAt: now + 60_000 };
   if (now >= attempt.resetAt) { attempt.count = 0; attempt.resetAt = now + 60_000; }
+  if (!invalidTokenAttempts.has(ip) && invalidTokenAttempts.size >= 4096) {
+    invalidTokenAttempts.delete(invalidTokenAttempts.keys().next().value);
+  }
   attempt.count += 1; invalidTokenAttempts.set(ip, attempt);
   return attempt.count <= 30;
 }
@@ -1432,7 +1435,7 @@ const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://localhost");
     if (url.pathname === "/internal/wacli/webhook" && req.method === "POST") {
-      return whatsapp.handleWebhook(req, res);
+      return await whatsapp.handleWebhook(req, res);
     }
     if (url.pathname === "/healthz") return json(res, signalReady ? 200 : 503, { ok: signalReady });
     if (url.pathname === "/favicon.ico") {

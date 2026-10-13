@@ -652,12 +652,18 @@ export class WhatsAppService {
   }
 
   async handleWebhook(req, res) {
+    const provided = String(req.headers["x-wacli-signature"] || "");
+    if (!/^[a-f0-9]{64}$/.test(provided)) return this.json(res, 401, { error: "Unauthorized" });
     const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
+    let size = 0;
+    for await (const chunk of req) {
+      size += chunk.length;
+      if (size > 1_000_000) return this.json(res, 413, { error: "Request too large" });
+      chunks.push(chunk);
+    }
     const raw = Buffer.concat(chunks);
     const expected = createHmac("sha256", this.webhookSecret).update(raw).digest("hex");
-    const provided = String(req.headers["x-wacli-signature"] || "");
-    if (provided.length !== expected.length || !timingSafeEqual(Buffer.from(provided), Buffer.from(expected))) {
+    if (!timingSafeEqual(Buffer.from(provided), Buffer.from(expected))) {
       return this.json(res, 401, { error: "Unauthorized" });
     }
     const event = JSON.parse(raw.toString("utf8"));
