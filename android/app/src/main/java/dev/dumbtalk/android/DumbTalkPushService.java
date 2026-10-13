@@ -63,6 +63,11 @@ public final class DumbTalkPushService extends PushService {
         }
     }
 
+    private Notification.MessagingStyle messagingStyle(Notification notification) {
+        Notification.Style style = Notification.Builder.recoverBuilder(this, notification).getStyle();
+        return style instanceof Notification.MessagingStyle ? (Notification.MessagingStyle) style : null;
+    }
+
     private Notification active(String chat) {
         for (StatusBarNotification entry : getSystemService(NotificationManager.class).getActiveNotifications()) {
             if (chat.equals(entry.getTag())) return entry.getNotification();
@@ -85,7 +90,7 @@ public final class DumbTalkPushService extends PushService {
         String messageId = payload.optString("messageId", timestamp + ":" + body);
         Notification previous = active(chat);
         Notification.MessagingStyle oldStyle = previous == null ? null
-                : Notification.MessagingStyle.extractMessagingStyleFromNotification(previous);
+                : messagingStyle(previous);
         List<Notification.MessagingStyle.Message> messages = new ArrayList<>();
         if (oldStyle != null) messages.addAll(oldStyle.getMessages());
         for (Notification.MessagingStyle.Message old : messages) {
@@ -133,7 +138,7 @@ public final class DumbTalkPushService extends PushService {
                 Notification current = active(chat);
                 if (current == null || !messageId.equals(current.extras.getString("dumbtalkRevision"))) return;
                 Icon icon = Icon.createWithBitmap(bitmap);
-                Notification.MessagingStyle currentStyle = Notification.MessagingStyle.extractMessagingStyleFromNotification(current);
+                Notification.MessagingStyle currentStyle = messagingStyle(current);
                 if (!group && currentStyle != null) {
                     Notification.MessagingStyle updated = new Notification.MessagingStyle(currentStyle.getUser()).setGroupConversation(false);
                     for (Notification.MessagingStyle.Message entry : currentStyle.getMessages()) {
