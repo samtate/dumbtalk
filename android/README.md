@@ -9,6 +9,8 @@ This Android app opens the existing DumbTalk interface from your own server. It 
 3. Install the APK on the phone using Android Studio or `adb install app/build/outputs/apk/debug/app-debug.apk`.
 4. At first launch, paste the complete DumbTalk widget URL, including `#` and its access key. The app checks `/api/status` before saving it. The server must already have been claimed.
 
+Commits to `main` also build a debug APK in GitHub Actions. Download the `dumbtalk-android-debug` artifact from the successful workflow run. It is a debug build for personal testing, not a signed release APK.
+
 The backend must run this updated source version. An older DumbTalk container will still serve the Android interface, but it cannot accept push subscriptions. Rebuild and deploy the backend from this source before enabling notifications.
 
 The app requires HTTPS. If the existing CloudPhone URL is restricted to CloudMosa server IP addresses, permit direct connections from the Android phone too. The server's UI and API stay at the same origin, so the backend does not need CORS changes. The phone needs direct access to the server on Wi-Fi or mobile data.
